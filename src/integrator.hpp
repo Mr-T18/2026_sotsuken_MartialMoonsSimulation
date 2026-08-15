@@ -33,10 +33,10 @@ struct State {
 // 戻り値はStateで，各成分は微分係数(変化分)とし，これを現在の値に足すことで積分とする
 // 運動方程式により，加速度を求める．
 
-// ガス抵抗も加味した運動方程式．
-// この結果からxi+vi*dtを引いてRK4の変化分とし，
-// その結果をLeapfrogの結果に足すことでステップ完了とする
+// ガス抵抗のみの影響を受けたとして運動方程式を解く
 State get_derivatives(const State& state) {
+  using namespace physics;
+  double r = state.r();
   double r3 = state.r3();
 
   // 重力項
@@ -44,15 +44,20 @@ State get_derivatives(const State& state) {
   double gy = 3.0 * state.y / r3;
   double gz = 3.0 * state.z / r3;
 
+  double rho_atm =
+      rho_neb *
+      exp((H / r) - (H / r_H));  // 火星からの距離によって変化するガス密度
+
   // ガス抵抗計算のための
-  double C = -3.0 / 8.0 * physics::rho_atm / (physics::rho_b * physics ::a_b);
+  double C = -3.0 / 8.0 * rho_atm / (rho_b * a_b);  // 速度にかかる比例係数
+  double normalC = C / (r_H * omega_K * omega_K);   // 力なので，正規化する
   double v =
       sqrt(state.vx * state.vx + state.vy * state.vy + state.vz * state.vz);
 
-  // 加速度．ガス抵抗含む
-  double ax = 2.0 * state.vy + 3.0 * state.x - gx + C * v * state.x;
-  double ay = -2.0 * state.vx - gy + C * v * state.z;
-  double az = -state.z - gz + C * v * state.z;
+  // 加速度
+  double ax = normalC * v * state.vx;
+  double ay = normalC * v * state.vy;
+  double az = normalC * v * state.vz;
 
   return {state.vx, state.vy, state.vz, ax, ay, az};
 }

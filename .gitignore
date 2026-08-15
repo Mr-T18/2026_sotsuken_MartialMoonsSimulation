@@ -1,2 +1,4 @@
 out/*
 !out/.gitkeep
+figures/*
+!figures/.gitkeep
