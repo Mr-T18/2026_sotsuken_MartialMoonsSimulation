@@ -6,53 +6,42 @@
 #include "integrator.hpp"
 
 int main() {
-  SystemState sys;
-
-  // 初期条件の代入
-  sys.sat.x = physics::x0;
-  sys.sat.y = physics::y0;
-  sys.sat.z = physics::z0;
-  sys.sat.vx = physics::vx0;
-  sys.sat.vy = physics::vy0;
-  sys.sat.vz = physics::vz0;
-
-  sys.acc_sat = get_derivatives(sys.sat);
+  // 初期条件の設定
+  State sat = {{physics::x0, physics::y0, physics::z0},
+               {physics::vx0, physics::vy0, physics::vz0}};
 
   std::ofstream ofs("out/result.dat");
   if (!ofs) {
     std::cerr << "Error: Cannot open resulut.dat" << std::endl;
   }
-
   std::cout << "Start Hill Simulation" << std::endl;
 
   double t = 0.0;
-  long long step = 0;
-
   const double OUTPUT_INTERVAL = 1e-3;  // 出力間隔
-  double next_output_time = 0.0;        // 次に出力
+  double next_output_time = 0.0;
 
   while (t <= physics::MAX_YEARS) {
+    // データ出力
     if (t >= next_output_time - 1e-9) {
-      double t_years = t;
-
-      double x = sys.sat.x;
-      double y = sys.sat.y;
-      double z = sys.sat.z;
-      double vx = sys.sat.vx;
-      double vy = sys.sat.vy;
-      double vz = sys.sat.vz;
-
-      ofs << std::scientific << std::setprecision(15) << t_years << " " << x
-          << " " << y << " " << z << " " << vx << " " << vy << " " << vz
-          << "\n";
+      ofs << std::scientific << std::setprecision(15) << t << " " << sat.r.x
+          << " " << sat.r.y << " " << sat.r.z << " " << sat.v.x << " "
+          << sat.v.y << " " << sat.v.z << "\n";
       next_output_time += OUTPUT_INTERVAL;
     }
 
-    sys = leapfrog_step(sys, physics::DT);
-    // sys.sat = rk4_step(sys.sat, physics::DT);
+    // 回文式での更新
+    // ガス抗力項で速度をdt/2だけ更新
+    sat.v = rk4_step(sat, physics::DT * 0.5);
+
+    // 保存力・コリオリ力項で位置と速度をリープフロッグ法で更新
+    sat = leapfrog_step(sat, physics::DT);
+
+    // 最後にガス抗力項で速度をもう一度半ステップ分更新
+    sat.v = rk4_step(sat, physics::DT * 0.5);
+
     t += physics::DT_YEARS;
-    step++;
   }
 
   std::cout << "Simulation Finish!" << std::endl;
+  return 0;
 }

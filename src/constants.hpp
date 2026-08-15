@@ -14,14 +14,14 @@ const double M_sun = 1.99e30;      // 太陽質量 [kg]
 const double M_mars = 6.42e23;     // 火星質量 [kg]
 const double M_sat = 1.06e16;      // 衛星質量 [kg]
 const double AU = 1.495978707e11;  // 天文単位 [m]
-// const double r_M = *******;
+const double r_M = 3396.2e3;       // 火星赤道半径 [m]
 
 // 火星の軌道長半径（約1.524 AU）[m]
 const double MARS_SEMI_MAJOR_AXIS = 1.52368 * AU;
 
 // 衛星の定数
-const double a_b = 10.0 * 1000;  // 半径[m]
-const double rho_b = 1850;       // 密度[kg m^-3]
+const double a_b = 10.0 * 1000.0;  // 半径[m]
+const double rho_b = 1850.0;       // 密度[kg m^-3]
 
 // ガス密度
 const double rho_neb = 4.7e-7;  // 密度[kg m^-3]
@@ -29,7 +29,7 @@ const double c_s = 840.4;       // 等温音速[m s^-1]
 const double H =
     G * M_mars /
     (c_s *
-     c_s)*;  // 大気のスケールハイト. 17.8[火星半径] -> [km]の単位への変換済み
+     c_s);  // 大気のスケールハイト. 17.8[火星半径] -> [m]の単位への変換済み
 
 // Hill座標系の定数
 // Hill半径

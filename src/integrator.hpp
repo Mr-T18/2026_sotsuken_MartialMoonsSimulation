@@ -5,126 +5,105 @@
 
 #include "constants.hpp"
 
-struct State {
-  double x;
-  double y;
-  double z;
-  double vx;
-  double vy;
-  double vz;
-
-  State operator+(const State& other) const {
-    return {x + other.x,   y + other.y,   z + other.z,
-            vx + other.vx, vy + other.vy, vz + other.vz};
+// 3次元ベクトル
+struct Vec3 {
+  double x, y, z;
+  Vec3 operator+(const Vec3& o) const { return {x + o.x, y + o.y, z + o.z}; }
+  Vec3 operator-(const Vec3& o) const { return {x - o.x, y - o.y, z - o.z}; }
+  Vec3 operator*(double s) const { return {x * s, y * s, z * s}; }
+  Vec3 operator/(double s) const { return {x / s, y / s, z / s}; }
+  Vec3& operator+=(const Vec3& o) {
+    x += o.x;
+    y += o.y;
+    z += o.z;
+    return *this;
   }
-  State operator*(double scalar) const {
-    return {x * scalar,  y * scalar,  z * scalar,
-            vx * scalar, vy * scalar, vz * scalar};
+  double norm() const { return std::sqrt(x * x + y * y + z * z); }
+  double norm2() const { return x * x + y * y + z * z; }
+  double norm3() const {
+    double n = norm();
+    return n * n * n;
   }
-
-  double r() const { return std::sqrt(x * x + y * y + z * z); }
-  double r2() const { return x * x + y * y + z * z; }
-  double r3() const { return std::pow(r(), 3); }
-
-  double v() const { return std::sqrt(vx * vx + vy * vy + vz * vz); }
-  double v2() const { return vx * vx + vy * vy + vz * vz; }
 };
 
-// 戻り値はStateで，各成分は微分係数(変化分)とし，これを現在の値に足すことで積分とする
-// 運動方程式により，加速度を求める．
+struct State {
+  Vec3 r;  // 位置ベクトル
+  Vec3 v;  // 速度ベクトル
+};
 
 // ガス抵抗のみの影響を受けたとして運動方程式を解く
-State get_derivatives(const State& state) {
-  using namespace physics;
-  double r = state.r();
-  double r3 = state.r3();
+// 位置と速度から加速度を求めるため，引数はstate
+inline Vec3 get_drag_acceleration(const Vec3& r, const Vec3& v) {
+  double r_norm = r.norm();
 
-  // 重力項
-  double gx = 3.0 * state.x / r3;
-  double gy = 3.0 * state.y / r3;
-  double gz = 3.0 * state.z / r3;
-
+  // 火星からの距離によって変化するガス密度．正規化した距離の計算ではないので，距離rにr_Hを掛けている
   double rho_atm =
-      rho_neb *
-      exp((H / r) - (H / r_H));  // 火星からの距離によって変化するガス密度
+      physics::rho_neb *
+      exp((physics::H / (r_norm * physics::r_H)) - (physics::H / physics::r_H));
 
-  // ガス抵抗計算のための
-  double C = -3.0 / 8.0 * rho_atm / (rho_b * a_b);  // 速度にかかる比例係数
-  double normalC = C / (r_H * omega_K * omega_K);   // 力なので，正規化する
-  double v =
-      sqrt(state.vx * state.vx + state.vy * state.vy + state.vz * state.vz);
+  // ガス抵抗計算のための速度にかかる比例係数
+  double C_norm =
+      -(3.0 / 8.0) * (rho_atm * physics::r_H) / (physics::rho_b * physics::a_b);
+  double v_norm = v.norm();
 
-  // 加速度
-  double ax = normalC * v * state.vx;
-  double ay = normalC * v * state.vy;
-  double az = normalC * v * state.vz;
-
-  return {state.vx, state.vy, state.vz, ax, ay, az};
+  // 加速度ベクトルを返す
+  return v * (C_norm * v_norm);
 }
 
-struct SystemState {
-  State sat;
-  State acc_sat;
-};
+// 潮汐力・遠心力・重力を含めた保存力の項を返す
+// ただし，速度依存のコリオリ力項は含めない
+inline Vec3 get_gravity_acceleration(const Vec3& r) {
+  double r3 = r.norm3();
 
-// リープフロッグ法で進める
-SystemState leapfrog_step(const SystemState& current, double dt) {
-  SystemState next;
-  double dt2 = dt * 0.5;
+  // 火星中心重力
+  double gx = 3.0 * r.x / r3;
+  double gy = 3.0 * r.y / r3;
+  double gz = 3.0 * r.z / r3;
 
-  // 現在の衛星の速度を，前回のステップから引き継いだ加速度で半ステップ進める
-  double v_half_x = current.sat.vx + current.acc_sat.vx * dt2;
-  double v_half_y = current.sat.vy + current.acc_sat.vy * dt2;
-  double v_half_z = current.sat.vz + current.acc_sat.vz * dt2;
+  // 重力，潮汐力，遠心力を含めたもの
+  return {3.0 * r.x - gx, -gy, -r.z - gz};
+}
 
-  // 衛星の位置を1ステップ進める
-  next.sat.x = current.sat.x + v_half_x * dt;
-  next.sat.y = current.sat.y + v_half_y * dt;
-  next.sat.z = current.sat.z + v_half_z * dt;
+// RK4ではガス抗力項のみ計算するが，更新するのは加速度(による速度)のみ
+inline Vec3 rk4_step(const State& state, double dt) {
+  Vec3 k1 = get_drag_acceleration(state.r, state.v);
+  Vec3 k2 = get_drag_acceleration(state.r, state.v + k1 * (0.5 * dt));
+  Vec3 k3 = get_drag_acceleration(state.r, state.v + k2 * (0.5 * dt));
+  Vec3 k4 = get_drag_acceleration(state.r, state.v + k3 * dt);
 
-  // 新しい位置における速度を求める
-  // 加速度を求めてからv_{n+1/2}に足す
-  double r = next.sat.r();
-  double r3 = next.sat.r3();
-  // 重力項
-  double gx = 3.0 * next.sat.x / r3;
-  double gy = 3.0 * next.sat.y / r3;
-  double gz = 3.0 * next.sat.z / r3;
+  // 戻り値：{ax, ay, az}
+  return state.v + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (dt / 6.0);
+}
 
-  double h = dt;
-  double h2 = h * h;
-  double inv_h2_1 = 1.0 / (1.0 + h * h);
+inline State leapfrog_step(const State& current, double dt) {
+  double dt_half = dt * 0.5;
 
-  // 加速度の更新
-  double ax = 3.0 * next.sat.x - gx +
-              2.0 *
-                  (v_half_y - h * gy * 0.5 - h * v_half_x -
-                   h2 * (3.0 * next.sat.x - gx) * 0.5) *
-                  inv_h2_1;
-  double ay = -gy - 2.0 *
-                        (v_half_x + h * (3.0 * next.sat.x - gx) * 0.5 +
-                         h * v_half_y - h2 * gy * 0.5) *
-                        inv_h2_1;
-  double az = -next.sat.z - gz;
+  // 現在の位置での重力を計算
+  Vec3 g_current = get_gravity_acceleration(current.r);
 
-  next.acc_sat.vx = ax;
-  next.acc_sat.vy = ay;
-  next.acc_sat.vz = az;
+  // First Kick:
+  // コリオリ力を含めて速度をdt/2更新．コリオリ力は既知なので，陰的に解くことができる
+  Vec3 v_half = {current.v.x + dt_half * (g_current.x + 2.0 * current.v.y),
+                 current.v.y + dt_half * (g_current.y - 2.0 * current.v.x),
+                 current.v.z + dt_half * g_current.z};
 
-  next.sat.vx = v_half_x + ax * dt2;
-  next.sat.vy = v_half_y + ay * dt2;
-  next.sat.vz = v_half_z + az * dt2;
+  // Full Drift: 位置の更新
+  State next;
+  next.r = current.r + v_half * dt;
+
+  // Second Kick: 新しい位置での速度の更新
+  // コリオリ力は速度依存で既知ではないので，行列の式変形をして，なんとか陰的に解く
+  // 新しい位置での重力加速度の計算
+  Vec3 g_next = get_gravity_acceleration(next.r);
+  double Ax = v_half.x + dt_half * g_next.x;
+  double Ay = v_half.y + dt_half * g_next.y;
+  double denom = 1.0 / (1.0 + dt * dt);
+
+  next.v.x = (Ax + dt * Ay) * denom;
+  next.v.y = (Ay - dt * Ax) * denom;
+  next.v.z = v_half.z + dt_half * g_next.z;
 
   return next;
-}
-
-State rk4_step(const State& state, double dt) {
-  State k1 = get_derivatives(state);
-  State k2 = get_derivatives(state + k1 * (0.5 * dt));
-  State k3 = get_derivatives(state + k2 * (0.5 * dt));
-  State k4 = get_derivatives(state + k3 * dt);
-
-  return state + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (dt / 6.0);
 }
 
 #endif
