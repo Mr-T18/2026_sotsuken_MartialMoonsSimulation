@@ -1,6 +1,15 @@
 from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
+
+
+def load_binary_data(filepath: Path):
+    """シミュレーション結果のbinファイル．(t, x, y, z, vx, vy, vz)を読み込み，pd.DataFrameに格納"""
+    data = np.fromfile(filepath, dtype=np.float64).reshape(-1, 7)
+    cols = ["t", "x", "y", "z", "vx", "vy", "vz"]
+    df = pd.DataFrame(data, columns=cols)
+    return df
 
 
 def load_data(filepath: Path):
@@ -50,13 +59,13 @@ def plot_orbit(df: pd.DataFrame, t_start: float, t_end: float, output_path: Path
 
 
 def main():
-    input_path = Path("out/result.dat")
-    t_start = 0
-    t_end = 10
+    input_path = Path("out/result.bin")
+    t_start = 15
+    t_end = 20
     output_filename = f"orbit_{int(t_start):04d}-{int(t_end):04d}.png"
     output_path = Path("figures/orbit") / output_filename
 
-    df = load_data(input_path)
+    df = load_binary_data(input_path)
 
     plot_orbit(df, t_start, t_end, output_path)
 
