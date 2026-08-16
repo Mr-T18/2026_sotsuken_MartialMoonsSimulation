@@ -5,7 +5,7 @@
 #include "constants.hpp"
 #include "integrator.hpp"
 
-inline void output_state(std::ofstream ofs, double t, const State& sat) {
+void output_state(std::ofstream& ofs, double t, const State& sat) {
   ofs << std::scientific << std::setprecision(15) << t << " " << sat.r.x << " "
       << sat.r.y << " " << sat.r.z << " " << sat.v.x << " " << sat.v.y << " "
       << sat.v.z << "\n";
@@ -25,43 +25,33 @@ int main() {
   double t = 0.0;
   const double OUTPUT_INTERVAL = 1e-3;  // 出力間隔[年]
   double next_output_time = 0.0;
+  const double dt = physics::DT;  // 計算に用いるタイムステップ幅
 
   // 初期位置，初速度の出力
-  ofs << std::scientific << std::setprecision(15) << t << " " << sat.r.x << " "
-      << sat.r.y << " " << sat.r.z << " " << sat.v.x << " " << sat.v.y << " "
-      << sat.v.z << "\n";
-  next_output_time += OUTPUT_INTERVAL;
+  output_state(ofs, t, sat);
 
-  // 最初に半ステップだけガス抗力項で速度のみ進める
-  sat.v = rk4_step(sat, physics::DT * 0.5);
+  while (t < physics::MAX_YEARS - 1e-9) {
+    // 次の出力時刻
+    double next_output_time = std::min(t + OUTPUT_INTERVAL, physics::MAX_YEARS);
 
-  while (t <= physics::MAX_YEARS) {
+    // 最初に半ステップのガス抗力項RK4
+    sat.v = rk4_step(sat, dt * 0.5);
+
+    // 出力時刻が来るまで，全ステップ幅で計算する
+    // 正確には，次の出力時刻の1ステップ前まで繰り返す
+    while (t + physics::DT_YEARS < next_output_time - 1e-9) {
+      sat = leapfrog_step(sat, dt);
+      sat.v = rk4_step(sat, dt);
+      t += physics::DT_YEARS;
+    }
+
+    // 出力時刻になったので，リープフロッグの後，半ステップのRK4で進めて，位置と速度を出力する
+    sat = leapfrog_step(sat, dt);
+    sat.v = rk4_step(sat, dt * 0.5);
     t += physics::DT_YEARS;
 
-    // 回文式での更新
-    // 保存力・コリオリ力項で位置と速度をリープフロッグ法で更新
-    sat = leapfrog_step(sat, physics::DT);
-
-    bool is_last_step = (t > physics::MAX_YEARS - physics::DT_YEARS);
-    if (is_last_step) {
-      // 最後にガス抗力項で速度をもう一度半ステップ分更新
-      sat.v = rk4_step(sat, physics::DT * 0.5);
-    } else {
-      // ガス抗力項で全ステップ分更新
-      sat.v = rk4_step(sat, physics::DT);
-    }
-
-    // データ出力
-    if (t >= next_output_time - 1e-9) {
-      State output_sat = sat;
-      output_sat.v = rk4_step(sat, physics::DT * 0.5);
-
-      ofs << std::scientific << std::setprecision(15) << t << " "
-          << output_sat.r.x << " " << output_sat.r.y << " " << output_sat.r.z
-          << " " << output_sat.v.x << " " << output_sat.v.y << " "
-          << output_sat.v.z << "\n";
-      next_output_time += OUTPUT_INTERVAL;
-    }
+    // 上の半ステップ幅のRK4で時刻に正しい位置と速度になったので，出力
+    output_state(ofs, t, sat);
   }
 
   std::cout << "Simulation Finish!" << std::endl;
