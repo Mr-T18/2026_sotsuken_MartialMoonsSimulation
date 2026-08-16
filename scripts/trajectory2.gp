@@ -1,7 +1,7 @@
 load "config.gp"
 
-t_min = 0
-t_max = 5.01
+t_min = 316
+t_max = 321
 
 # 太陽中心慣性座標での火星と衛星の位置
 set output "../figures/orbit.png"

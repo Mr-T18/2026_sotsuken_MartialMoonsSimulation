@@ -47,8 +47,8 @@ const double omega_K_yr = omega_K * SEC_PER_YEAR;
 
 // シミュレーションの初期条件
 const double v0_m_s = 20.0;
-const double phi0_deg = 47.24263;
-const double zeta0_deg = 30.06809;
+const double phi0_deg = 12.65817;
+const double zeta0_deg = 75.84470;
 // ラジアンに変換
 const double phi0 = DEG_TO_RAD(phi0_deg);
 const double zeta0 = DEG_TO_RAD(zeta0_deg);
@@ -71,7 +71,7 @@ const double DT_YEARS = 1e-5;  // [年] (正規化してない方程式では年
 const double DT =
     DT_YEARS * omega_K_yr;  // [無次元] (正規化した方程式での積分につかう) (DT =
                             // d\tilde{t})
-const double MAX_YEARS = 6.0;
+const double MAX_YEARS = 1000.0;
 
 }  // namespace physics
 
